@@ -1,0 +1,12 @@
+body {
+    background-color: red;
+}
+
+.big-title {
+    font-size: 60px;
+    color: aquamarine;
+}
+
+.mg-50 {
+    margin: 50px;
+}
