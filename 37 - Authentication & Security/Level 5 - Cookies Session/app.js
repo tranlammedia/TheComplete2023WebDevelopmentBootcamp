@@ -47,6 +47,20 @@ app.route("/login")
     })
     .post(async (req, res) => {
         const { username, password } = req.body;
+        const user = new User({
+            username: username,
+            password: password
+        })
+        req.login(user, function (err) {
+            if (err) {
+                console.log(err)
+            } else {
+                console.log(user)
+                passport.authenticate("local")(req, res, function () {
+                    res.redirect("/secrets");
+                });
+            }
+        })
     });
 
 app.route("/register")
@@ -78,6 +92,13 @@ app.get("/secrets", async (req, res) => {
         res.redirect("/login");
     }
 });
+
+app.get("/logout", async (req, res) => {
+    req.logout(function (err) {
+        if (err) { return next(err); }
+        res.redirect('/');
+    });
+})
 
 app.listen(PORT, () => {
     console.log("listening on port " + PORT);
