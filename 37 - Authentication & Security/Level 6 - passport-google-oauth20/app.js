@@ -4,14 +4,18 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import session from "express-session";
 import passport from "passport";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 
 import { User } from "./models/User.js";
 
 dotenv.config();
 const app = express();
+
 const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL || "mongodb://127.0.0.1:27017/";
 const SECRET = process.env.SECRET;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
 app.set("view engine", "ejs");
 app.use(express.static("public"));
@@ -30,12 +34,60 @@ app.use(passport.session());
 mongoose.connect(DATABASE_URL);
 
 passport.use(User.createStrategy());
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+// passport.serializeUser(User.serializeUser());
+// passport.deserializeUser(User.deserializeUser());
+
+passport.serializeUser(function (user, cb) {
+    process.nextTick(function () {
+        cb(null, { id: user.id, username: user.username, name: user.name });
+    });
+});
+
+passport.deserializeUser(function (user, cb) {
+    process.nextTick(function () {
+        return cb(null, user);
+    });
+});
+
+// setup google auth
+const googleStrategy = new GoogleStrategy(
+    {
+        clientID: GOOGLE_CLIENT_ID,
+        clientSecret: GOOGLE_CLIENT_SECRET,
+        callbackURL: "http://127.0.0.1:3000/auth/google/secrets",
+        // https://github.com/jaredhanson/passport-google-oauth2/pull/51
+        userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
+    },
+    function (accessToken, refreshToken, profile, cb) {
+        console.log(profile.id);
+        User.findOrCreate({ googleId: profile.id }, function (err, user) {
+            return cb(err, user);
+        });
+    }
+);
+
+passport.use(googleStrategy);
 
 app.get("/", async (req, res) => {
     res.render("home");
 });
+
+app.get(
+    "/auth/google",
+    passport.authenticate("google", { scope: ["profile"] }),
+    async (req, res) => {
+        console.log("google authenticated");
+    }
+);
+
+app.get(
+    "/auth/google/secrets",
+    passport.authenticate("google", { failureRedirect: "/login" }),
+    function (req, res) {
+        // Successful authentication, redirect secrets.
+        res.redirect("/secrets");
+    }
+);
 
 app.route("/login")
     .get(async (req, res) => {
@@ -50,18 +102,18 @@ app.route("/login")
         const { username, password } = req.body;
         const user = new User({
             username: username,
-            password: password
-        })
+            password: password,
+        });
         req.login(user, function (err) {
             if (err) {
-                console.log(err)
+                console.log(err);
             } else {
-                console.log(user)
+                console.log(user);
                 passport.authenticate("local")(req, res, function () {
                     res.redirect("/secrets");
                 });
             }
-        })
+        });
     });
 
 app.route("/register")
@@ -96,10 +148,12 @@ app.get("/secrets", async (req, res) => {
 
 app.get("/logout", async (req, res) => {
     req.logout(function (err) {
-        if (err) { return next(err); }
-        res.redirect('/');
+        if (err) {
+            return next(err);
+        }
+        res.redirect("/");
     });
-})
+});
 
 app.listen(PORT, () => {
     console.log("listening on port " + PORT);
