@@ -54,7 +54,7 @@ const googleStrategy = new GoogleStrategy(
     {
         clientID: GOOGLE_CLIENT_ID,
         clientSecret: GOOGLE_CLIENT_SECRET,
-        callbackURL: "http://127.0.0.1:3000/auth/google/secrets",
+        callbackURL: "/auth/google/secrets",
         // https://github.com/jaredhanson/passport-google-oauth2/pull/51
         userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
     },
@@ -69,7 +69,11 @@ const googleStrategy = new GoogleStrategy(
 passport.use(googleStrategy);
 
 app.get("/", async (req, res) => {
-    res.render("home");
+    if (req.isAuthenticated()) {
+        res.redirect("/secrets");
+    } else {
+        res.render("home");
+    }
 });
 
 app.get(
@@ -82,7 +86,10 @@ app.get(
 
 app.get(
     "/auth/google/secrets",
-    passport.authenticate("google", { failureRedirect: "/login" }),
+    passport.authenticate("google", { 
+        successReturnToOrRedirect: '/secrets',
+        failureRedirect: "/login" }
+    ),
     function (req, res) {
         // Successful authentication, redirect secrets.
         res.redirect("/secrets");
@@ -91,7 +98,7 @@ app.get(
 
 app.route("/login")
     .get(async (req, res) => {
-        console.log(req.session);
+        // console.log(req.session);
         if (req.isAuthenticated()) {
             res.redirect("/secrets");
         } else {
@@ -108,7 +115,7 @@ app.route("/login")
             if (err) {
                 console.log(err);
             } else {
-                console.log(user);
+                
                 passport.authenticate("local")(req, res, function () {
                     res.redirect("/secrets");
                 });
@@ -129,7 +136,7 @@ app.route("/register")
                     console.log(err);
                     res.redirect("/register");
                 } else {
-                    console.log(user);
+                    // console.log(user);
                     passport.authenticate("local")(req, res, function () {
                         res.redirect("/secrets");
                     });
@@ -140,12 +147,33 @@ app.route("/register")
 
 app.get("/secrets", async (req, res) => {
     if (req.isAuthenticated()) {
-        res.render("secrets");
+        const usersWithSecrets = await User.find({"secret": {$ne: null}});
+        
+        res.render("secrets", {usersWithSecrets});
     } else {
         res.redirect("/login");
     }
 });
 
+app.route("/submit")
+    .get(async (req, res) => {
+        if (req.isAuthenticated()) {
+            res.render("submit");
+        } else {
+            res.redirect("/login");
+        }
+    })
+    .post(async (req, res) => {
+        const submitedSerect = req.body.secret
+        const foundUser = await User.findById(req.user.id);
+        console.log(req.user);
+        if (foundUser) {
+            foundUser.secret = submitedSerect;
+            await foundUser.save();
+            res.redirect("/secrets");
+        }
+
+    });
 app.get("/logout", async (req, res) => {
     req.logout(function (err) {
         if (err) {
